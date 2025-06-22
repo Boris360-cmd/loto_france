@@ -39,7 +39,7 @@ def generer_grilles(df, date_obj):
 
     recent = [n for nums in history.tail(3)['Main_Numbers'] for n in nums]
     g2_raw = [n for n, _ in Counter(recent).most_common() if n not in g1]
-    g2 = g2_raw[:5] + [n for n in counter if n not in g1 and n not in g2_raw][:5 - len(g2_raw)]
+    g2 = (g2_raw + [n for n in counter if n not in g1 and n not in g2_raw])[:5]
 
     rare = [n for n, _ in counter.most_common()][-10:]
     freq = [n for n, _ in counter.most_common(10)]
@@ -76,6 +76,14 @@ resultats = generer_grilles(df, date_prochaine)
 df_grilles = pd.DataFrame(resultats)
 for res in resultats:
     st.markdown(f"- **{res['Grille']}** : {res['Numéros']} | **Chance** : {res['Chance']}")
+
+# Affichage visuel des grilles
+st.markdown("<style>.bulle {display: inline-block; background: #004aad; color: white; border-radius: 50%; padding: 0.4em 0.65em; margin: 0.15em; font-weight: bold; font-size: 1.2em;} .chance {background: red !important;}</style>", unsafe_allow_html=True)
+
+for res in resultats:
+    nums_html = ''.join([f'<span class="bulle">{n}</span>' for n in res['Numéros']])
+    chance_html = f'<span class="bulle chance">{res["Chance"]}</span>'
+    st.markdown(f"<strong>{res['Grille']}</strong><br>{nums_html} {chance_html}<hr>", unsafe_allow_html=True)
 
 # Export CSV
 csv = df_grilles.to_csv(index=False).encode('utf-8')
