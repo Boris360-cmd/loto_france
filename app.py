@@ -68,11 +68,11 @@ with st.spinner("Chargement des données réelles du Loto France..."):
 st.markdown("---")
 choix_jour = st.selectbox("Choisissez un jour de tirage :", ["Monday", "Wednesday", "Saturday"])
 
-# ✅ CORRECTION ICI : calcul précis du prochain jour de tirage
+# CORRECTION : calcul précis de la date du prochain jour de tirage
 aujourdhui = datetime.today()
 delta = {"Monday": 0, "Wednesday": 2, "Saturday": 5}[choix_jour] - aujourdhui.weekday()
 if delta < 0:
-    delta += 7  # vise le prochain jour correspondant
+    delta += 7
 date_prochaine = aujourdhui + timedelta(days=delta)
 
 st.markdown(f"### 🔮 Tirage prévu le **{date_prochaine.date()}** ({choix_jour})")
@@ -92,9 +92,52 @@ for res in resultats:
 
 # Export CSV
 csv = df_grilles.to_csv(index=False).encode('utf-8')
-st.download_button("📥 Télécharger les grilles en CSV", data=csv, file_name="grilles_prochain_tirage.csv", mime="text/csv")
+st.download_button(":inbox_tray: Télécharger les grilles en CSV", data=csv, file_name="grilles_prochain_tirage.csv", mime="text/csv")
 
 # Évaluation sur les 180 derniers tirages avec filtre par jour
 st.markdown("---")
-st.subheader("📊 Évaluation sur les 180 derniers tirages")
-filtre_jour = st.selectbo_
+st.subheader(":bar_chart: Évaluation sur les 180 derniers tirages")
+filtre_jour = st.selectbox("Filtrer l'évaluation par jour de tirage :", ["All", "Monday", "Wednesday", "Saturday"])
+recents = df.tail(180)
+if filtre_jour != "All":
+    recents = recents[recents['Jour'] == filtre_jour]
+
+eval_data = []
+perf_dict = performance_chances(df)
+for row in recents.itertuples():
+    history = df[(df['Date'] < row.Date) & (df['Date'] >= row.Date - timedelta(days=180))]
+    if len(history) < 5:
+        continue
+    all_numbers = [n for nums in history['Main_Numbers'] for n in nums]
+    counter = Counter(all_numbers)
+    g1 = [n for n, _ in counter.most_common(5)]
+    recent = [n for nums in history.tail(3)['Main_Numbers'] for n in nums]
+    g2_raw = [n for n, _ in Counter(recent).most_common() if n not in g1]
+    g2 = g2_raw[:5] + [n for n in counter if n not in g1 and n not in g2_raw][:5 - len(g2_raw)]
+    rare = [n for n, _ in counter.most_common()][-10:]
+    freq = [n for n, _ in counter.most_common(10)]
+    g3 = freq[:3] + rare[:2]
+    fusion = [n for n, _ in Counter(g1 + g2 + g3).most_common(5)]
+
+    actual_main = set(row.Main_Numbers)
+    actual_chance = row.numero_chance
+    for name, nums in [("Grille 1", g1), ("Grille 2", g2), ("Grille 3", g3), ("Fusion", fusion)]:
+        match = len(set(nums) & actual_main)
+        chance_hit = int(best_chance(nums, perf_dict) == actual_chance)
+        eval_data.append({"Date": row.Date.date(), "Jour": row.Jour, "Grille": name, "Match": match, "Chance_OK": chance_hit})
+
+df_eval = pd.DataFrame(eval_data)
+perf_summary = df_eval.groupby("Grille").agg({"Match": "mean", "Chance_OK": "mean"}).round(2)
+st.dataframe(perf_summary)
+
+# Visualisation
+df_eval['Date'] = pd.to_datetime(df_eval['Date'])
+chart = alt.Chart(df_eval).mark_line(point=True).encode(
+    x='Date:T',
+    y='Match:Q',
+    color='Grille:N'
+).properties(title="Évolution des bons numéros par grille (180 derniers tirages)")
+st.altair_chart(chart, use_container_width=True)
+
+st.markdown("---")
+st.caption("\u00a9 Application basée sur les données OpenData du Loto France.")
